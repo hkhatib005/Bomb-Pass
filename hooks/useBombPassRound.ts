@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { CATEGORIES } from '../content/categories';
@@ -99,32 +99,27 @@ export function useBombPassRound(roster: Player[]): BombPassRoundView {
   const canPassAtRef = useRef(0);
   const nextTickAtRef = useRef(0);
 
-  const tickSoundRef = useRef<Audio.Sound | null>(null);
-  const explosionSoundRef = useRef<Audio.Sound | null>(null);
+  const tickSoundRef = useRef<AudioPlayer | null>(null);
+  const explosionSoundRef = useRef<AudioPlayer | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    Audio.setAudioModeAsync({ playsInSilentModeIOS: true }).catch(() => {});
-    (async () => {
-      const [tickResult, explosionResult] = await Promise.allSettled([
-        Audio.Sound.createAsync(require('../assets/audio/tick.wav')),
-        Audio.Sound.createAsync(require('../assets/audio/explosion.wav')),
-      ]);
-      const tick = tickResult.status === 'fulfilled' ? tickResult.value.sound : null;
-      const explosion = explosionResult.status === 'fulfilled' ? explosionResult.value.sound : null;
-      if (cancelled) {
-        tick?.unloadAsync();
-        explosion?.unloadAsync();
-        return;
-      }
-      tickSoundRef.current = tick;
-      explosionSoundRef.current = explosion;
-    })();
+    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    const tick = createAudioPlayer(require('../assets/audio/tick.wav'));
+    const explosion = createAudioPlayer(require('../assets/audio/explosion.wav'));
+    tickSoundRef.current = tick;
+    explosionSoundRef.current = explosion;
     return () => {
-      cancelled = true;
-      tickSoundRef.current?.unloadAsync();
-      explosionSoundRef.current?.unloadAsync();
+      tick.remove();
+      explosion.remove();
+      tickSoundRef.current = null;
+      explosionSoundRef.current = null;
     };
+  }, []);
+
+  const replaySound = useCallback((sound: AudioPlayer | null) => {
+    if (!sound) return;
+    sound.seekTo(0).catch(() => {});
+    sound.play();
   }, []);
 
   const startFuse = useCallback((excludeCategory: Category | null) => {
@@ -148,7 +143,7 @@ export function useBombPassRound(roster: Player[]): BombPassRoundView {
   const detonate = useCallback(() => {
     if (phase !== 'active' || !holderId) return;
 
-    explosionSoundRef.current?.replayAsync().catch(() => {});
+    replaySound(explosionSoundRef.current);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
 
@@ -167,7 +162,7 @@ export function useBombPassRound(roster: Player[]): BombPassRoundView {
 
     const alive = next.filter((p) => !p.eliminated);
     setPhase(alive.length <= 1 ? 'match-over' : 'detonated');
-  }, [phase, holderId, players]);
+  }, [phase, holderId, players, replaySound]);
 
   // 100ms polling loop: checks elapsed time against the absolute end
   // timestamp and schedules the next accelerating tick.
@@ -182,13 +177,13 @@ export function useBombPassRound(roster: Player[]): BombPassRoundView {
       }
 
       if (now >= nextTickAtRef.current) {
-        tickSoundRef.current?.replayAsync().catch(() => {});
+        replaySound(tickSoundRef.current);
         const remaining = endsAtRef.current - now;
         nextTickAtRef.current = now + computeTickInterval(remaining, fuseTotalRef.current);
       }
     }, CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [phase, detonate]);
+  }, [phase, detonate, replaySound]);
 
   const pass = useCallback(() => {
     if (phase !== 'active') return;

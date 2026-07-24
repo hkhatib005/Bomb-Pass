@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PauseMenu } from '../../components/PauseMenu';
 import { colors } from '../../constants/theme';
 import { getGameById } from '../../content/games';
 import { useBombPassRound } from '../../hooks/useBombPassRound';
@@ -32,8 +33,14 @@ export default function BombPassRoundScreen() {
 
   const overlayVisible = round.phase !== 'active';
 
+  const quitToHome = () => {
+    session.reset();
+    router.replace('/');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <PauseMenu accentColor={colors.flame} accentInkColor={colors.flameInk} onQuit={quitToHome} />
       <Pressable
         style={styles.tapTarget}
         onPress={round.pass}

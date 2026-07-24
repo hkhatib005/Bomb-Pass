@@ -32,7 +32,12 @@ export interface Game {
   description: string;
   minPlayers: number;
   maxPlayers: number;
-  isFree: boolean;
+  /**
+   * True for games that draw from the shared daily free-round pool
+   * (see hooks/useDailyRounds.tsx). False means Pro-only — no free rounds
+   * at all, regardless of the daily pool's remaining count.
+   */
+  hasFreeTrial: boolean;
   /** Entry route for this game's screen flow. Absent while the game has no UI built yet. */
   route?: string;
 }

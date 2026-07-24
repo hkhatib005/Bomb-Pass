@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/theme';
 import { getGameById } from '../../content/games';
 import { useBombPassSession } from '../../hooks/useBombPassSession';
+import { useDailyRounds } from '../../hooks/useDailyRounds';
+import { usePurchases } from '../../hooks/usePurchases';
 import { createId } from '../../lib/id';
 
 const BOMB_PASS_GAME = getGameById('bomb-pass')!;
@@ -28,6 +30,8 @@ interface DraftPlayer {
 export default function BombPassSetupScreen() {
   const router = useRouter();
   const session = useBombPassSession();
+  const { isPro } = usePurchases();
+  const { canPlay, consumeRound } = useDailyRounds(isPro);
   const [draftPlayers, setDraftPlayers] = useState<DraftPlayer[]>([
     { id: createId(), name: '' },
     { id: createId(), name: '' },
@@ -53,11 +57,16 @@ export default function BombPassSetupScreen() {
 
   const startGame = () => {
     if (!canStart) return;
+    if (!canPlay) {
+      router.replace('/go-pro');
+      return;
+    }
     const finalPlayers = draftPlayers
       .filter((p) => p.name.trim().length > 0)
       .map((p) => ({ id: p.id, name: p.name.trim() }));
     session.setMatchResult(null);
     session.setPlayers(finalPlayers);
+    consumeRound();
     router.push('/bomb-pass/round');
   };
 
@@ -103,7 +112,7 @@ export default function BombPassSetupScreen() {
           onPress={startGame}
           disabled={!canStart}
         >
-          <Text style={styles.startButtonText}>
+          <Text style={[styles.startButtonText, !canStart && styles.startButtonTextDisabled]}>
             {canStart ? 'Start Game' : `Add ${MIN_PLAYERS - filledCount} more`}
           </Text>
         </Pressable>
@@ -195,5 +204,8 @@ const styles = StyleSheet.create({
     color: colors.flameInk,
     fontSize: 18,
     fontWeight: '800',
+  },
+  startButtonTextDisabled: {
+    color: colors.inkFaint,
   },
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import {
   FlatList,
@@ -13,30 +13,34 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/theme';
 import { getGameById } from '../../content/games';
-import { useChameleonSession } from '../../hooks/useChameleonSession';
-import { useDailyRounds } from '../../hooks/useDailyRounds';
+import { useCategoryBlitzSession } from '../../hooks/useCategoryBlitzSession';
 import { usePurchases } from '../../hooks/usePurchases';
 import { createId } from '../../lib/id';
 
-const CHAMELEON_GAME = getGameById('chameleon')!;
-const MIN_PLAYERS = CHAMELEON_GAME.minPlayers;
-const MAX_PLAYERS = CHAMELEON_GAME.maxPlayers;
+const GAME = getGameById('category-blitz')!;
+const MIN_PLAYERS = GAME.minPlayers;
+const MAX_PLAYERS = GAME.maxPlayers;
 
 interface DraftPlayer {
   id: string;
   name: string;
 }
 
-export default function ChameleonSetupScreen() {
+/** Pro-only game — no free rounds, unlike Bomb Pass/Chameleon's shared daily pool. */
+export default function CategoryBlitzSetupScreen() {
   const router = useRouter();
-  const session = useChameleonSession();
-  const { isPro } = usePurchases();
-  const { canPlay, consumeRound } = useDailyRounds(isPro);
+  const session = useCategoryBlitzSession();
+  const { isReady, isPro } = usePurchases();
   const [draftPlayers, setDraftPlayers] = useState<DraftPlayer[]>([
     { id: createId(), name: '' },
     { id: createId(), name: '' },
-    { id: createId(), name: '' },
   ]);
+
+  useEffect(() => {
+    if (isReady && !isPro) {
+      router.replace('/go-pro');
+    }
+  }, [isReady, isPro, router]);
 
   const filledCount = draftPlayers.filter((p) => p.name.trim().length > 0).length;
   const canStart = filledCount >= MIN_PLAYERS;
@@ -56,25 +60,22 @@ export default function ChameleonSetupScreen() {
   };
 
   const startGame = () => {
-    if (!canStart) return;
-    if (!canPlay) {
-      router.replace('/go-pro');
-      return;
-    }
+    if (!canStart || !isPro) return;
     const finalPlayers = draftPlayers
       .filter((p) => p.name.trim().length > 0)
       .map((p) => ({ id: p.id, name: p.name.trim() }));
     session.setMatchResult(null);
     session.setPlayers(finalPlayers);
-    consumeRound();
-    router.push('/chameleon/round');
+    router.push('/category-blitz/round');
   };
+
+  if (!isReady || !isPro) return null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Text style={styles.title}>Who's playing?</Text>
-        <Text style={styles.subtitle}>Add at least {MIN_PLAYERS} players to start</Text>
+        <Text style={styles.subtitle}>Add at least {MIN_PLAYERS} players. Each gets one timed turn.</Text>
 
         <FlatList
           data={draftPlayers}
@@ -182,7 +183,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   addButtonText: {
-    color: colors.mint,
+    color: colors.spark,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -190,7 +191,7 @@ const styles = StyleSheet.create({
     color: colors.inkFaint,
   },
   startButton: {
-    backgroundColor: colors.mint,
+    backgroundColor: colors.spark,
     borderRadius: 20,
     paddingVertical: 20,
     alignItems: 'center',
@@ -201,7 +202,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardRaised,
   },
   startButtonText: {
-    color: colors.mintInk,
+    color: colors.flameInk,
     fontSize: 18,
     fontWeight: '800',
   },

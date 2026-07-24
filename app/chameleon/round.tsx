@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PauseMenu } from '../../components/PauseMenu';
 import { colors } from '../../constants/theme';
 import { getGameById } from '../../content/games';
 import { useChameleonRound } from '../../hooks/useChameleonRound';
@@ -69,6 +70,12 @@ export default function ChameleonRoundScreen() {
 
   if (session.players.length < MIN_PLAYERS) return null;
 
+  const quitToHome = () => {
+    session.reset();
+    router.replace('/');
+  };
+  const pauseMenu = <PauseMenu accentColor={colors.mint} accentInkColor={colors.mintInk} onQuit={quitToHome} />;
+
   if (round.phase === 'reveal') {
     const revealer = round.currentRevealer;
     if (!revealer) return null;
@@ -77,6 +84,7 @@ export default function ChameleonRoundScreen() {
     if (!handoffAcknowledged) {
       return (
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+          {pauseMenu}
           <View style={styles.centerScreen}>
             <Text style={styles.handoffLabel}>Pass the phone to</Text>
             <Text style={styles.handoffName}>{revealer.name}</Text>
@@ -91,6 +99,7 @@ export default function ChameleonRoundScreen() {
     if (!roleShown) {
       return (
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+          {pauseMenu}
           <Pressable style={styles.tapTarget} onPress={() => setRoleShown(true)}>
             <Text style={styles.tapHint}>🤫 Make sure no one else is looking</Text>
             <Text style={styles.tapHintBig}>TAP TO REVEAL YOUR ROLE</Text>
@@ -101,6 +110,7 @@ export default function ChameleonRoundScreen() {
 
     return (
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        {pauseMenu}
         <View style={styles.roleHeader}>
           <Text style={styles.categoryLabel}>{round.category.name}</Text>
           {isChameleon ? (
@@ -128,6 +138,7 @@ export default function ChameleonRoundScreen() {
   if (round.phase === 'discussion') {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        {pauseMenu}
         <View style={styles.discussionHeader}>
           <Text style={styles.categoryLabel}>{round.category.name}</Text>
           <Text style={styles.timerText}>{formatTime(round.discussionSecondsRemaining)}</Text>
@@ -148,6 +159,7 @@ export default function ChameleonRoundScreen() {
     if (!voteHandoffAcknowledged) {
       return (
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+          {pauseMenu}
           <View style={styles.centerScreen}>
             <Text style={styles.handoffLabel}>Pass the phone to</Text>
             <Text style={styles.handoffName}>{voter.name}</Text>
@@ -161,6 +173,7 @@ export default function ChameleonRoundScreen() {
 
     return (
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        {pauseMenu}
         <Text style={styles.votingTitle}>Who's the Chameleon?</Text>
         <View style={styles.voteList}>
           {round.votableTargets.map((target) => (
