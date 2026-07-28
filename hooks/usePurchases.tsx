@@ -6,6 +6,9 @@ import { useAuth } from './useAuth';
 /** RevenueCat entitlement identifier that both the lifetime unlock and the subscription grant. */
 const PRO_ENTITLEMENT_ID = 'pro';
 
+/** Accounts that always get Pro, regardless of purchase status — for testing/admin use. */
+const ADMIN_EMAILS = ['leje0z1@aol.com'];
+
 const REVENUECAT_API_KEY =
   Platform.OS === 'ios'
     ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY
@@ -70,10 +73,12 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id]);
 
+  const isAdmin = Boolean(user?.email && ADMIN_EMAILS.includes(user.email));
+
   const value = useMemo<PurchasesContextValue>(
     () => ({
       isReady,
-      isPro: customerInfo?.entitlements.active[PRO_ENTITLEMENT_ID] != null,
+      isPro: isAdmin || customerInfo?.entitlements.active[PRO_ENTITLEMENT_ID] != null,
       offering,
       purchase: async (pkg) => {
         if (!PURCHASES_SUPPORTED) return { error: 'Purchases are only available on iOS and Android.' };
@@ -98,7 +103,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [isReady, customerInfo, offering]
+    [isReady, customerInfo, offering, isAdmin]
   );
 
   return <PurchasesContext.Provider value={value}>{children}</PurchasesContext.Provider>;

@@ -31,7 +31,7 @@ export default function BombPassSetupScreen() {
   const router = useRouter();
   const session = useBombPassSession();
   const { isPro } = usePurchases();
-  const { canPlay, consumeRound } = useDailyRounds(isPro);
+  const { canPlay, consumeRound } = useDailyRounds('bomb-pass', isPro);
   const [draftPlayers, setDraftPlayers] = useState<DraftPlayer[]>([
     { id: createId(), name: '' },
     { id: createId(), name: '' },

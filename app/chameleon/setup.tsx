@@ -31,7 +31,7 @@ export default function ChameleonSetupScreen() {
   const router = useRouter();
   const session = useChameleonSession();
   const { isPro } = usePurchases();
-  const { canPlay, consumeRound } = useDailyRounds(isPro);
+  const { canPlay, consumeRound } = useDailyRounds('chameleon', isPro);
   const [draftPlayers, setDraftPlayers] = useState<DraftPlayer[]>([
     { id: createId(), name: '' },
     { id: createId(), name: '' },

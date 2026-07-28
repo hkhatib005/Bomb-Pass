@@ -11,7 +11,7 @@ import type { Game } from '../types/game';
 function GameCard({ game, index }: { game: Game; index: number }) {
   const router = useRouter();
   const { isPro } = usePurchases();
-  const { loaded, remaining, canPlay } = useDailyRounds(isPro);
+  const { loaded, remaining, canPlay } = useDailyRounds(game.id, isPro);
 
   const isUnbuilt = !game.route;
   const isFeatured = index === 0;

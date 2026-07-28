@@ -53,8 +53,9 @@ their free daily allowance regardless.
 up): **$3.99/month**, **$9.99/year**, or **$19.99 one-time** for lifetime access. Set up all three
 as an Offering in RevenueCat, each attached to the `pro` entitlement, to match.
 
-**Free tier**: Bomb Pass and Chameleon share one pool of 2 free rounds a day
-(`hooks/useDailyRounds.tsx`, `Game.hasFreeTrial` in `content/games.ts`, reset at local midnight).
+**Free tier**: Bomb Pass and Chameleon each get their own 2 free rounds a day (independent pools,
+not shared) via `hooks/useDailyRounds.tsx` / `Game.hasFreeTrial` in `content/games.ts`, reset at
+local midnight.
 Every other game (Most Likely To, Would You Rather, Truth or Dare, Category Blitz) is Pro-only —
 no free rounds at all. Pro removes both restrictions everywhere.
 
