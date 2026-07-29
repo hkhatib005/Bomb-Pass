@@ -67,9 +67,15 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!PURCHASES_SUPPORTED || !configured.current) return;
     if (user) {
-      Purchases.logIn(user.id).then(({ customerInfo: info }) => setCustomerInfo(info));
+      Purchases.logIn(user.id)
+        .then(({ customerInfo: info }) => setCustomerInfo(info))
+        .catch(() => {});
     } else {
-      Purchases.logOut().then(setCustomerInfo);
+      // No-op (and throws) when the SDK's current user is already anonymous,
+      // which is the common case: launching signed-out, or signing out.
+      Purchases.logOut()
+        .then(setCustomerInfo)
+        .catch(() => {});
     }
   }, [user?.id]);
 

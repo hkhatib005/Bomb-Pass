@@ -1,12 +1,17 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MainMenu } from '../components/MainMenu';
+import { Onboarding } from '../components/Onboarding';
 import { colors } from '../constants/theme';
 import { GAMES } from '../content/games';
 import { useDailyRounds } from '../hooks/useDailyRounds';
 import { usePurchases } from '../hooks/usePurchases';
 import type { Game } from '../types/game';
+
+const ONBOARDING_KEY = 'has-onboarded';
 
 function GameCard({ game, index }: { game: Game; index: number }) {
   const router = useRouter();
@@ -70,6 +75,20 @@ function GameCard({ game, index }: { game: Game; index: number }) {
 }
 
 export default function HomeScreen() {
+  const router = useRouter();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(ONBOARDING_KEY).then((value) => {
+      if (!value) setShowOnboarding(true);
+    });
+  }, []);
+
+  const dismissOnboarding = () => {
+    AsyncStorage.setItem(ONBOARDING_KEY, '1').catch(() => {});
+    setShowOnboarding(false);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.headerRow}>
@@ -86,6 +105,16 @@ export default function HomeScreen() {
         contentContainerStyle={styles.list}
         renderItem={({ item, index }) => <GameCard game={item} index={index} />}
       />
+
+      <Modal visible={showOnboarding} animationType="fade" onRequestClose={dismissOnboarding}>
+        <Onboarding
+          onContinueFree={dismissOnboarding}
+          onGoPro={() => {
+            dismissOnboarding();
+            router.push('/go-pro');
+          }}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }
