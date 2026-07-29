@@ -12,29 +12,36 @@ function todayString(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * Doubles as both the AsyncStorage key and the in-memory state key. Embedding
+ * today's date in the key (recomputed on every call) means a date rollover
+ * while the app is open just produces a new, never-seen key — the count
+ * naturally reads back as 0 with no explicit "is it still today" check needed.
+ */
 function storageKey(gameId: string): string {
   return `daily-rounds:${gameId}:${todayString()}`;
 }
 
 interface DailyRoundsContextValue {
   loaded: boolean;
-  usedByGame: Record<string, number>;
+  usedByKey: Record<string, number>;
   consumeRound: (gameId: string) => void;
 }
 
 const DailyRoundsContext = createContext<DailyRoundsContextValue | null>(null);
 
 export function DailyRoundsProvider({ children }: { children: ReactNode }) {
-  const [usedByGame, setUsedByGame] = useState<Record<string, number>>({});
+  const [usedByKey, setUsedByKey] = useState<Record<string, number>>({});
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     Promise.all(
-      TRIAL_GAME_IDS.map((id) =>
-        AsyncStorage.getItem(storageKey(id)).then((value) => [id, value ? parseInt(value, 10) || 0 : 0] as const)
-      )
+      TRIAL_GAME_IDS.map((id) => {
+        const key = storageKey(id);
+        return AsyncStorage.getItem(key).then((value) => [key, value ? parseInt(value, 10) || 0 : 0] as const);
+      })
     ).then((pairs) => {
-      setUsedByGame(Object.fromEntries(pairs));
+      setUsedByKey(Object.fromEntries(pairs));
       setLoaded(true);
     });
   }, []);
@@ -43,16 +50,17 @@ export function DailyRoundsProvider({ children }: { children: ReactNode }) {
   // write only ever happens after the real stored values have been loaded.
   useEffect(() => {
     if (!loaded) return;
-    for (const [gameId, count] of Object.entries(usedByGame)) {
-      AsyncStorage.setItem(storageKey(gameId), String(count)).catch(() => {});
+    for (const [key, count] of Object.entries(usedByKey)) {
+      AsyncStorage.setItem(key, String(count)).catch(() => {});
     }
-  }, [usedByGame, loaded]);
+  }, [usedByKey, loaded]);
 
   const consumeRound = useCallback((gameId: string) => {
-    setUsedByGame((prev) => ({ ...prev, [gameId]: (prev[gameId] ?? 0) + 1 }));
+    const key = storageKey(gameId);
+    setUsedByKey((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }));
   }, []);
 
-  const value = useMemo(() => ({ loaded, usedByGame, consumeRound }), [loaded, usedByGame, consumeRound]);
+  const value = useMemo(() => ({ loaded, usedByKey, consumeRound }), [loaded, usedByKey, consumeRound]);
 
   return <DailyRoundsContext.Provider value={value}>{children}</DailyRoundsContext.Provider>;
 }
@@ -72,7 +80,7 @@ export function useDailyRounds(gameId: string, isPro: boolean): DailyRoundsView 
     throw new Error('useDailyRounds must be used within a DailyRoundsProvider');
   }
 
-  const usedToday = ctx.usedByGame[gameId] ?? 0;
+  const usedToday = ctx.usedByKey[storageKey(gameId)] ?? 0;
   const remaining = isPro ? Infinity : Math.max(0, FREE_ROUNDS_PER_DAY - usedToday);
   const canPlay = isPro || remaining > 0;
 

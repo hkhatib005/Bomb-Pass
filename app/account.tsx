@@ -94,6 +94,13 @@ function SignedInView({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Resyncs if displayName arrives asynchronously after mount — e.g. Apple's
+  // fullName is only applied via a follow-up updateUser call after sign-in,
+  // which can resolve after this view has already rendered with the old value.
+  useEffect(() => {
+    setName(displayName ?? '');
+  }, [displayName]);
+
   const saveName = async () => {
     const trimmed = name.trim();
     if (!trimmed || trimmed === displayName) return;
