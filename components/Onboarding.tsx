@@ -133,9 +133,23 @@ export function Onboarding({
   onGoPro: () => void;
 }) {
   const [step, setStep] = useState(0);
+  const [showContinueFree, setShowContinueFree] = useState(false);
   const fade = useRef(new Animated.Value(0)).current;
   const slideX = useRef(new Animated.Value(18)).current;
   const iconScale = useRef(new Animated.Value(0.4)).current;
+
+  const slide = SLIDES[step];
+  const isLast = step === SLIDES.length - 1;
+
+  // Give the Go Pro pitch a few uncontested seconds before offering the free path out.
+  useEffect(() => {
+    if (!isLast) {
+      setShowContinueFree(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowContinueFree(true), 3000);
+    return () => clearTimeout(timer);
+  }, [isLast]);
 
   useEffect(() => {
     fade.setValue(0);
@@ -147,9 +161,6 @@ export function Onboarding({
       Animated.spring(iconScale, { toValue: 1, friction: 5, tension: 90, delay: 70, useNativeDriver: true }),
     ]).start();
   }, [step, fade, slideX, iconScale]);
-
-  const slide = SLIDES[step];
-  const isLast = step === SLIDES.length - 1;
 
   const next = () => {
     if (!isLast) setStep((s) => s + 1);
@@ -176,9 +187,9 @@ export function Onboarding({
             />
           ))}
         </View>
-        {!isLast && (
+        {(!isLast || showContinueFree) && (
           <Pressable onPress={onContinueFree} hitSlop={12}>
-            <Text style={styles.skipText}>Skip</Text>
+            <Text style={styles.skipText}>{isLast ? 'Continue Free' : 'Skip'}</Text>
           </Pressable>
         )}
       </View>
@@ -228,11 +239,6 @@ export function Onboarding({
         >
           {isLast ? 'Go Pro' : 'Next'}
         </BouncyButton>
-        {isLast && (
-          <Pressable style={styles.secondaryButton} onPress={onContinueFree}>
-            <Text style={styles.secondaryButtonText}>Continue Free</Text>
-          </Pressable>
-        )}
       </View>
     </SafeAreaView>
   );
@@ -383,14 +389,5 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 17,
     fontWeight: '800',
-  },
-  secondaryButton: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.inkDim,
   },
 });

@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PauseMenu } from '../../components/PauseMenu';
 import { colors } from '../../constants/theme';
@@ -9,6 +9,32 @@ import { useBombPassRound } from '../../hooks/useBombPassRound';
 import { useBombPassSession } from '../../hooks/useBombPassSession';
 
 const MIN_PLAYERS = getGameById('bomb-pass')!.minPlayers;
+
+/**
+ * Purely decorative fidget loop — intentionally NOT tied to the actual fuse
+ * countdown, which stays hidden from the view (useBombPassRound) on purpose
+ * so players can't read the real time left and game the pass.
+ */
+function BombIcon() {
+  const wobble = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(wobble, { toValue: 1, duration: 260, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(wobble, { toValue: -1, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(wobble, { toValue: 0, duration: 260, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.delay(900),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [wobble]);
+
+  const rotate = wobble.interpolate({ inputRange: [-1, 1], outputRange: ['-8deg', '8deg'] });
+
+  return <Animated.Text style={[styles.bombIcon, { transform: [{ rotate }] }]}>💣</Animated.Text>;
+}
 
 export default function BombPassRoundScreen() {
   const router = useRouter();
@@ -64,6 +90,8 @@ export default function BombPassRoundScreen() {
         </ScrollView>
 
         <View style={styles.center}>
+          <BombIcon />
+
           {round.category?.kind === 'challenge' ? (
             <>
               <Text style={styles.categoryLabel}>{round.category.name.toUpperCase()}</Text>
@@ -151,6 +179,10 @@ const styles = StyleSheet.create({
   center: {
     alignItems: 'center',
     gap: 6,
+  },
+  bombIcon: {
+    fontSize: 64,
+    marginBottom: 8,
   },
   categoryLabel: {
     color: colors.spark,

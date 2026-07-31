@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PACKAGE_TYPE, type PurchasesPackage } from 'react-native-purchases';
@@ -50,6 +50,9 @@ export default function GoProScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const planListY = useRef(0);
+  const hasAutoScrolled = useRef(false);
 
   const plans = useMemo<PlanOption[]>(() => {
     if (offering && offering.availablePackages.length > 0) {
@@ -69,6 +72,16 @@ export default function GoProScreen() {
       setSelectedId(plans[0].id);
     }
   }, [plans, selectedId]);
+
+  // Jump straight to pricing when arriving to buy — no reason to make the sale wait behind the feature list.
+  useEffect(() => {
+    if (hasAutoScrolled.current || !isReady || isPro || !PURCHASES_AVAILABLE) return;
+    hasAutoScrolled.current = true;
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(planListY.current - 16, 0), animated: true });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [isReady, isPro]);
 
   const selectedPlan = plans.find((p) => p.id === selectedId) ?? null;
   const isLivePricing = plans[0]?.pkg != null;
@@ -110,7 +123,7 @@ export default function GoProScreen() {
         <View style={styles.backButton} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
         <Text style={styles.eyebrow}>UNLIMITED PLAY</Text>
         <Text style={styles.title}>Every game.{'\n'}No daily limit.</Text>
         <Text style={styles.subtitle}>
@@ -147,7 +160,12 @@ export default function GoProScreen() {
           <ActivityIndicator color={colors.spark} style={styles.loader} />
         ) : (
           <>
-            <View style={styles.planList}>
+            <View
+              style={styles.planList}
+              onLayout={(e) => {
+                planListY.current = e.nativeEvent.layout.y;
+              }}
+            >
               {plans.map((plan) => {
                 const selected = plan.id === selectedId;
                 return (
