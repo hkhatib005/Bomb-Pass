@@ -10,6 +10,34 @@ cp .env.example .env   # fill in the keys below
 npx expo start
 ```
 
+## EAS cloud builds also need these keys — separately from `.env`
+
+`.env` is git-ignored and only exists on your machine, so `eas build` (which clones the repo and
+builds in Expo's cloud) never sees it. Without this step, cloud builds compile with empty
+Supabase/RevenueCat keys — sign-in and purchases silently show their "not configured" fallback
+UI instead of erroring loudly, so this is easy to miss until you actually test a real build.
+
+Mirror every `EXPO_PUBLIC_*` value from `.env` into EAS itself, once per environment you build with
+(at minimum `production`):
+
+```
+npx eas-cli env:create --scope project --environment production \
+  --name EXPO_PUBLIC_SUPABASE_URL --value "<your value>" \
+  --type string --visibility plaintext --non-interactive
+
+npx eas-cli env:create --scope project --environment production \
+  --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "<your value>" \
+  --type string --visibility plaintext --non-interactive
+
+npx eas-cli env:create --scope project --environment production \
+  --name EXPO_PUBLIC_REVENUECAT_IOS_KEY --value "<your value>" \
+  --type string --visibility plaintext --non-interactive
+```
+
+Check what's already set with `npx eas-cli env:list --environment production`. If you rotate any
+key (e.g. a new Supabase project), update it here too, or future cloud builds will silently revert
+to the old value.
+
 ## Account (Supabase)
 
 Sign-in lives in `app/account.tsx`, backed by `lib/supabase.ts` / `hooks/useAuth.tsx`.
