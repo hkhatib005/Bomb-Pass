@@ -1,6 +1,6 @@
 import { LegalPage, Section } from '../../components/LegalPage';
 
-const CONTACT_EMAIL = 'support@bombpass.app';
+const CONTACT_EMAIL = 'hkhatib005@gmail.com';
 
 export default function TermsScreen() {
   return (

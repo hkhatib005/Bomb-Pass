@@ -13,8 +13,6 @@ interface AuthContextValue {
   /** True only while the initial session is being restored from storage on launch. */
   loading: boolean;
   displayName: string | null;
-  signUp: (email: string, password: string, displayName: string) => Promise<AuthResult>;
-  signIn: (email: string, password: string) => Promise<AuthResult>;
   signInWithApple: () => Promise<AuthResult>;
   signOut: () => Promise<void>;
   updateDisplayName: (name: string) => Promise<AuthResult>;
@@ -50,20 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       loading,
       displayName: (session?.user?.user_metadata?.display_name as string | undefined) ?? null,
-      signUp: async (email, password, displayName) => {
-        if (!supabase) return { error: NOT_CONFIGURED_ERROR };
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { display_name: displayName } },
-        });
-        return { error: error?.message ?? null };
-      },
-      signIn: async (email, password) => {
-        if (!supabase) return { error: NOT_CONFIGURED_ERROR };
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        return { error: error?.message ?? null };
-      },
       signInWithApple: async () => {
         if (!supabase) return { error: NOT_CONFIGURED_ERROR };
         try {
