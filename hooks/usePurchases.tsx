@@ -6,9 +6,6 @@ import { useAuth } from './useAuth';
 /** RevenueCat entitlement identifier that both the lifetime unlock and the subscription grant. */
 const PRO_ENTITLEMENT_ID = 'pro';
 
-/** Accounts that always get Pro, regardless of purchase status — for testing/admin use. */
-const ADMIN_EMAILS = ['leje0z1@aol.com'];
-
 const REVENUECAT_API_KEY =
   Platform.OS === 'ios'
     ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY
@@ -16,8 +13,10 @@ const REVENUECAT_API_KEY =
       ? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY
       : undefined;
 
-/** RevenueCat has no web SDK — purchases are a no-op there and everything reads as not-pro. */
+/** This app intentionally supports native StoreKit/Play purchases only — purchases are a no-op on web and everything reads as not-pro. */
 const PURCHASES_SUPPORTED = Platform.OS === 'ios' || Platform.OS === 'android';
+
+const UNREACHABLE_ERROR = 'Could not reach the store. Check your connection and try again.';
 
 interface PurchaseResult {
   error: string | null;
@@ -28,69 +27,102 @@ interface PurchasesContextValue {
   isReady: boolean;
   isPro: boolean;
   offering: PurchasesOffering | null;
+  /** Set when RevenueCat isn't configured, or the last fetch/refresh failed — surface this instead of a silent blank state. */
+  error: string | null;
   purchase: (pkg: PurchasesPackage) => Promise<PurchaseResult>;
   restore: () => Promise<PurchaseResult>;
+  /** Re-fetches customer info and offerings — used to retry after a failed initial load. */
+  refresh: () => Promise<void>;
 }
 
 const PurchasesContext = createContext<PurchasesContextValue | null>(null);
+
+async function fetchPurchasesState(): Promise<{ info: CustomerInfo; offering: PurchasesOffering | null }> {
+  const [info, offerings] = await Promise.all([Purchases.getCustomerInfo(), Purchases.getOfferings()]);
+  return { info, offering: offerings.current };
+}
 
 export function PurchasesProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [isReady, setIsReady] = useState(!PURCHASES_SUPPORTED);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
   const [offering, setOffering] = useState<PurchasesOffering | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const configured = useRef(false);
 
   useEffect(() => {
     if (!PURCHASES_SUPPORTED) return;
     if (!REVENUECAT_API_KEY) {
       console.warn('Missing RevenueCat API key — set EXPO_PUBLIC_REVENUECAT_IOS_KEY / _ANDROID_KEY in .env.');
+      setError('Purchases aren’t configured yet.');
       setIsReady(true);
       return;
     }
-    if (configured.current) return;
-    configured.current = true;
+    if (!configured.current) {
+      configured.current = true;
+      Purchases.configure({ apiKey: REVENUECAT_API_KEY });
+    }
 
-    Purchases.configure({ apiKey: REVENUECAT_API_KEY });
     Purchases.addCustomerInfoUpdateListener(setCustomerInfo);
 
-    Promise.all([Purchases.getCustomerInfo(), Purchases.getOfferings()])
-      .then(([info, offerings]) => {
+    fetchPurchasesState()
+      .then(({ info, offering: current }) => {
         setCustomerInfo(info);
-        setOffering(offerings.current);
+        setOffering(current);
+        setError(null);
       })
+      .catch((err: any) => setError(err?.message ?? UNREACHABLE_ERROR))
       .finally(() => setIsReady(true));
+
+    return () => {
+      Purchases.removeCustomerInfoUpdateListener(setCustomerInfo);
+    };
   }, []);
 
   // Tie the RevenueCat app-user to the Supabase account so a purchase made
   // signed-in on one device restores automatically when signed in elsewhere.
   useEffect(() => {
     if (!PURCHASES_SUPPORTED || !configured.current) return;
+    let cancelled = false;
+
     if (user) {
       Purchases.logIn(user.id)
-        .then(({ customerInfo: info }) => setCustomerInfo(info))
-        .catch(() => {});
+        .then(({ customerInfo: info }) => {
+          if (!cancelled) setCustomerInfo(info);
+        })
+        .catch((err: any) => console.warn('RevenueCat logIn failed:', err?.message ?? err));
     } else {
-      // No-op (and throws) when the SDK's current user is already anonymous,
-      // which is the common case: launching signed-out, or signing out.
-      Purchases.logOut()
-        .then(setCustomerInfo)
-        .catch(() => {});
+      // logOut() throws when the SDK's current user is already anonymous
+      // (the common case: launching signed-out), so check first and skip it.
+      Purchases.isAnonymous()
+        .then((isAnonymous) => {
+          if (cancelled || isAnonymous) return;
+          return Purchases.logOut().then((info) => {
+            if (!cancelled) setCustomerInfo(info);
+          });
+        })
+        .catch((err: any) => console.warn('RevenueCat logOut failed:', err?.message ?? err));
     }
-  }, [user?.id]);
 
-  const isAdmin = Boolean(user?.email && ADMIN_EMAILS.includes(user.email));
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const value = useMemo<PurchasesContextValue>(
     () => ({
       isReady,
-      isPro: isAdmin || customerInfo?.entitlements.active[PRO_ENTITLEMENT_ID] != null,
+      isPro: customerInfo?.entitlements.active[PRO_ENTITLEMENT_ID] != null,
       offering,
+      error,
       purchase: async (pkg) => {
         if (!PURCHASES_SUPPORTED) return { error: 'Purchases are only available on iOS and Android.' };
         try {
           const { customerInfo: info } = await Purchases.purchasePackage(pkg);
           setCustomerInfo(info);
+          if (info.entitlements.active[PRO_ENTITLEMENT_ID] == null) {
+            return { error: 'Purchase completed, but Pro isn’t active yet. Try restoring purchases.' };
+          }
           return { error: null };
         } catch (err: any) {
           if (err?.userCancelled) return { error: null, cancelled: true };
@@ -108,8 +140,19 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           return { error: err?.message ?? 'Restore failed.' };
         }
       },
+      refresh: async () => {
+        if (!PURCHASES_SUPPORTED || !configured.current) return;
+        try {
+          const { info, offering: current } = await fetchPurchasesState();
+          setCustomerInfo(info);
+          setOffering(current);
+          setError(null);
+        } catch (err: any) {
+          setError(err?.message ?? UNREACHABLE_ERROR);
+        }
+      },
     }),
-    [isReady, customerInfo, offering, isAdmin]
+    [isReady, customerInfo, offering, error]
   );
 
   return <PurchasesContext.Provider value={value}>{children}</PurchasesContext.Provider>;

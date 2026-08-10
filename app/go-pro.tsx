@@ -10,12 +10,18 @@ import { usePurchases } from '../hooks/usePurchases';
 
 const PURCHASES_AVAILABLE = Platform.OS === 'ios' || Platform.OS === 'android';
 
-/** Shown until RevenueCat's real offering loads (or if it's not configured yet) — see README for setup. */
-const RECOMMENDED_PLANS: PlanOption[] = [
-  { id: 'recommended-monthly', label: 'Monthly', sublabel: 'Cancel anytime', price: '$3.99', pkg: null },
-  { id: 'recommended-yearly', label: 'Yearly', sublabel: 'Best value — cancel anytime', price: '$9.99', pkg: null },
-  { id: 'recommended-lifetime', label: 'Lifetime access', sublabel: 'Pay once, own it forever', price: '$19.99', pkg: null },
+/**
+ * Dev-only placeholder pricing so the paywall is reviewable before RevenueCat products exist.
+ * Never shown in a production runtime — see README for RevenueCat setup.
+ */
+const DEV_PREVIEW_PLANS: PlanOption[] = [
+  { id: 'preview-monthly', label: 'Monthly', sublabel: 'Cancel anytime', price: '$3.99', pkg: null },
+  { id: 'preview-yearly', label: 'Yearly', sublabel: 'Best value — cancel anytime', price: '$9.99', pkg: null },
+  { id: 'preview-lifetime', label: 'Lifetime access', sublabel: 'Pay once, own it forever', price: '$19.99', pkg: null },
 ];
+
+/** Initial-selection preference when a real offering has more than one package. */
+const PACKAGE_TYPE_PRIORITY = [PACKAGE_TYPE.ANNUAL, PACKAGE_TYPE.LIFETIME, PACKAGE_TYPE.MONTHLY];
 
 interface PlanOption {
   id: string;
@@ -44,12 +50,21 @@ function packageSublabel(pkg: PurchasesPackage): string | undefined {
   return pkg.packageType === PACKAGE_TYPE.LIFETIME ? 'Pay once, own it forever' : 'Cancel anytime';
 }
 
+function preferredInitialPlanId(plans: PlanOption[]): string | null {
+  for (const type of PACKAGE_TYPE_PRIORITY) {
+    const match = plans.find((plan) => plan.pkg?.packageType === type);
+    if (match) return match.id;
+  }
+  return plans[0]?.id ?? null;
+}
+
 export default function GoProScreen() {
   const router = useRouter();
-  const { isReady, isPro, offering, purchase, restore } = usePurchases();
+  const { isReady, isPro, offering, error, purchase, restore, refresh } = usePurchases();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const planListY = useRef(0);
   const hasAutoScrolled = useRef(false);
@@ -64,24 +79,25 @@ export default function GoProScreen() {
         pkg,
       }));
     }
-    return RECOMMENDED_PLANS;
+    // Placeholder App Store prices are only acceptable in development preview builds.
+    return __DEV__ ? DEV_PREVIEW_PLANS : [];
   }, [offering]);
 
   useEffect(() => {
     if (plans.length > 0 && !plans.some((p) => p.id === selectedId)) {
-      setSelectedId(plans[0].id);
+      setSelectedId(preferredInitialPlanId(plans));
     }
   }, [plans, selectedId]);
 
   // Jump straight to pricing when arriving to buy — no reason to make the sale wait behind the feature list.
   useEffect(() => {
-    if (hasAutoScrolled.current || !isReady || isPro || !PURCHASES_AVAILABLE) return;
+    if (hasAutoScrolled.current || !isReady || isPro || !PURCHASES_AVAILABLE || plans.length === 0) return;
     hasAutoScrolled.current = true;
     const timer = setTimeout(() => {
       scrollRef.current?.scrollTo({ y: Math.max(planListY.current - 16, 0), animated: true });
     }, 350);
     return () => clearTimeout(timer);
-  }, [isReady, isPro]);
+  }, [isReady, isPro, plans.length]);
 
   const selectedPlan = plans.find((p) => p.id === selectedId) ?? null;
   const isLivePricing = plans[0]?.pkg != null;
@@ -111,6 +127,12 @@ export default function GoProScreen() {
     const result = await restore();
     setRestoring(false);
     Alert.alert(result.error ? 'Restore' : 'Restored', result.error ?? 'Your purchase has been restored.');
+  };
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    await refresh();
+    setRetrying(false);
   };
 
   return (
@@ -158,6 +180,20 @@ export default function GoProScreen() {
           </View>
         ) : !isReady ? (
           <ActivityIndicator color={colors.spark} style={styles.loader} />
+        ) : plans.length === 0 ? (
+          <View style={styles.unavailableCard}>
+            <Text style={styles.unavailableTitle}>Pricing temporarily unavailable</Text>
+            <Text style={styles.unavailableBody}>
+              {error ?? "We couldn't load pricing from the App Store. Check your connection and try again."}
+            </Text>
+            <Pressable style={styles.retryButton} onPress={handleRetry} disabled={retrying}>
+              {retrying ? (
+                <ActivityIndicator color={colors.flameInk} />
+              ) : (
+                <Text style={styles.retryButtonText}>Try Again</Text>
+              )}
+            </Pressable>
+          </View>
         ) : (
           <>
             <View
@@ -187,7 +223,9 @@ export default function GoProScreen() {
               })}
             </View>
             {!isLivePricing && (
-              <Text style={styles.previewNote}>Preview pricing — connect RevenueCat to enable purchases.</Text>
+              <Text style={styles.previewNote}>
+                Dev preview pricing — connect RevenueCat to enable real purchases.
+              </Text>
             )}
 
             <Pressable style={styles.ctaButton} onPress={handleContinue} disabled={purchasing}>
@@ -199,6 +237,10 @@ export default function GoProScreen() {
                 </Text>
               )}
             </Pressable>
+            <Text style={styles.billingNote}>
+              Charged to your App Store account. Subscriptions renew automatically until canceled.
+              Purchases can be restored on any device signed in to the same App Store account.
+            </Text>
           </>
         )}
 
@@ -338,6 +380,40 @@ const styles = StyleSheet.create({
   loader: {
     marginTop: 20,
   },
+  unavailableCard: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 18,
+    padding: 20,
+    alignItems: 'center',
+  },
+  unavailableTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.ink,
+    textAlign: 'center',
+  },
+  unavailableBody: {
+    fontSize: 14,
+    color: colors.inkDim,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  retryButton: {
+    backgroundColor: colors.spark,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  retryButtonText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.flameInk,
+  },
   planList: {
     gap: 12,
   },
@@ -408,6 +484,14 @@ const styles = StyleSheet.create({
     color: colors.flameInk,
     fontSize: 17,
     fontWeight: '800',
+  },
+  billingNote: {
+    fontSize: 11,
+    color: colors.inkFaint,
+    lineHeight: 15,
+    textAlign: 'center',
+    marginTop: 12,
+    paddingHorizontal: 8,
   },
   footerLinks: {
     flexDirection: 'row',

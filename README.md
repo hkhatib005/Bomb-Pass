@@ -38,18 +38,27 @@ Check what's already set with `npx eas-cli env:list --environment production`. I
 key (e.g. a new Supabase project), update it here too, or future cloud builds will silently revert
 to the old value.
 
-## Account (Supabase)
+## Account (Supabase + Sign in with Apple)
 
-Sign-in lives in `app/account.tsx`, backed by `lib/supabase.ts` / `hooks/useAuth.tsx`.
+Sign-in lives in `app/account.tsx`, backed by `lib/supabase.ts` / `hooks/useAuth.tsx`. Auth is
+**Sign in with Apple only** — there is no manual email/password sign-up. Signing in is optional;
+every game works fully signed out, and Apple sign-in only exists to sync a Pro unlock and display
+name across devices.
+
+**Purchases never require signing in.** StoreKit/RevenueCat purchases and restores work fully
+anonymously to keep checkout friction low — see "Payments (RevenueCat)" below for how identity
+and restore interact.
 
 1. Create a project at supabase.com.
 2. Project Settings → API → copy the **Project URL** and **anon public** key into `.env` as
    `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
-3. Authentication → Providers → Email is on by default. Turn off "Confirm email" while testing
-   if you don't want to click a confirmation link after every sign-up.
-4. No database tables are required — display name is stored on the auth user itself
+3. Authentication → Providers → enable **Apple**, per Supabase's
+   [Sign in with Apple guide](https://supabase.com/docs/guides/auth/social-login/auth-apple).
+4. In your Apple Developer account, enable the **Sign in with Apple** capability for
+   `com.bombpass.app` (already configured in `app.json` via `expo-apple-authentication`).
+5. No database tables are required — display name is stored on the auth user itself
    (`user_metadata.display_name`).
-5. Deploy the delete-account function (lets users self-delete from Account → Delete Account):
+6. Deploy the delete-account function (lets users self-delete from Account → Delete Account):
    ```
    npx supabase login
    npx supabase link --project-ref <your-project-ref>
@@ -73,19 +82,39 @@ Paywall lives in `app/go-pro.tsx`, backed by `hooks/usePurchases.tsx`.
 5. Purchases only work in dev/production builds on a real device or simulator with a sandbox
    account — not in Expo Go, and not on web.
 
-Until these are configured, sign-in and purchases will show a console warning and fail
-gracefully (Go Pro shows "not available right now"); Bomb Pass and Chameleon still work within
-their free daily allowance regardless.
+Until these are configured, sign-in and purchases will show a console warning and fail gracefully;
+Bomb Pass and Chameleon still work within their free daily allowance regardless. In a **development**
+build, Go Pro falls back to preview pricing (clearly marked as dev-only) so the paywall UI is
+reviewable before real products exist. In a **production** build it never shows fake prices — if
+RevenueCat has no current offering, Go Pro shows a "temporarily unavailable" card with a retry
+button instead.
 
-**Recommended pricing** (shown as preview pricing on the paywall until real products are wired
-up): **$3.99/month**, **$9.99/year**, or **$19.99 one-time** for lifetime access. Set up all three
-as an Offering in RevenueCat, each attached to the `pro` entitlement, to match.
+**Recommended pricing** (used as the dev preview pricing shown above): **$3.99/month**,
+**$9.99/year**, or **$19.99 one-time** for lifetime access. Set up all three as an Offering in
+RevenueCat, each attached to the `pro` entitlement, to match.
 
 **Free tier**: Bomb Pass and Chameleon each get their own 2 free rounds a day (independent pools,
 not shared) via `hooks/useDailyRounds.tsx` / `Game.hasFreeTrial` in `content/games.ts`, reset at
 local midnight.
 Every other game (Most Likely To, Would You Rather, Truth or Dare, Category Blitz) is Pro-only —
 no free rounds at all. Pro removes both restrictions everywhere.
+
+**Identity policy — Apple sign-in is optional, purchases are not gated behind it:**
+
+- By default every customer is an **anonymous RevenueCat App User ID** (a random ID StoreKit/the
+  RevenueCat SDK generates on-device). Purchasing and restoring both work fully signed out —
+  restoration is handled by StoreKit itself based on the App Store account on the device, not by
+  our own account system.
+- If a user *optionally* signs in with Apple, `hooks/usePurchases.tsx` calls `Purchases.logIn(user.id)`
+  using the **Supabase user UUID** as the RevenueCat App User ID. This doesn't change how purchases
+  or restores work — it's purely additive, giving that user extra cross-device profile syncing
+  (their Pro entitlement and RevenueCat customer record follow their Supabase account instead of
+  staying tied to one device's anonymous ID).
+- This means a given person's purchase history can briefly exist under an anonymous ID and later
+  get merged into their signed-in Supabase-UUID identity the first time they sign in. RevenueCat's
+  **Project settings → Restore Behavior** should stay set to **"Transfer to new App User ID"** (the
+  default) so that merge happens automatically — only switch it to "Keep existing App User ID" if
+  you intentionally want a stricter, non-transferring account-recovery policy instead.
 
 ## Admin — viewing accounts, subscriptions, and comping free Pro
 
@@ -107,5 +136,4 @@ copies are in `legal/privacy.html` and `legal/terms.html`. Push them to GitHub P
 host) and put that URL in App Store Connect's "Privacy Policy URL" field and Play Console's Data
 Safety section.
 
-Before shipping, replace the placeholder `support@bombpass.app` address in both the in-app screens
-and the HTML files with an email you actually control.
+Support/contact email across the in-app screens and the HTML files is `hkhatib005@gmail.com`.

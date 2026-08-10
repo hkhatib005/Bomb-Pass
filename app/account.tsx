@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -17,8 +16,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../constants/theme';
 import { useAuth } from '../hooks/useAuth';
 import { usePurchases } from '../hooks/usePurchases';
-
-type Mode = 'signIn' | 'signUp';
 
 function initialsFor(name: string | null, email: string | null): string {
   if (name && name.trim()) {
@@ -34,8 +31,7 @@ function initialsFor(name: string | null, email: string | null): string {
 
 export default function AccountScreen() {
   const router = useRouter();
-  const { user, displayName, loading, signIn, signUp, signInWithApple, signOut, updateDisplayName, deleteAccount } =
-    useAuth();
+  const { user, displayName, loading, signInWithApple, signOut, updateDisplayName, deleteAccount } = useAuth();
   const { isPro } = usePurchases();
 
   if (loading) {
@@ -67,7 +63,7 @@ export default function AccountScreen() {
           onGoPro={() => router.push('/go-pro')}
         />
       ) : (
-        <AuthForm onSignIn={signIn} onSignUp={signUp} onSignInWithApple={signInWithApple} />
+        <SignedOutView onSignInWithApple={signInWithApple} />
       )}
     </SafeAreaView>
   );
@@ -145,7 +141,7 @@ function SignedInView({
         </View>
         <View style={styles.avatarInfo}>
           <Text style={styles.avatarName}>{displayName || 'Player'}</Text>
-          <Text style={styles.avatarEmail}>{email}</Text>
+          {email.length > 0 && <Text style={styles.avatarEmail}>{email}</Text>}
         </View>
       </View>
 
@@ -192,45 +188,32 @@ function SignedInView({
   );
 }
 
-function AuthForm({
-  onSignIn,
-  onSignUp,
+function SignedOutView({
   onSignInWithApple,
 }: {
-  onSignIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  onSignUp: (email: string, password: string, displayName: string) => Promise<{ error: string | null }>;
   onSignInWithApple: () => Promise<{ error: string | null }>;
 }) {
-  const [mode, setMode] = useState<Mode>('signIn');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [appleBusy, setAppleBusy] = useState(false);
-  const [appleAvailable, setAppleAvailable] = useState(false);
+  // Tri-state: null while we're checking, so the button doesn't flash in and out.
+  const [appleAvailable, setAppleAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    AppleAuthentication.isAvailableAsync().then(setAppleAvailable);
-  }, []);
-
-  const canSubmit =
-    email.trim().length > 3 && password.length >= 6 && (mode === 'signIn' || name.trim().length > 0);
-
-  const submit = async () => {
-    if (!canSubmit || submitting) return;
-    setSubmitting(true);
-    const result =
-      mode === 'signIn'
-        ? await onSignIn(email.trim(), password)
-        : await onSignUp(email.trim(), password, name.trim());
-    setSubmitting(false);
-    if (result.error) {
-      Alert.alert(mode === 'signIn' ? 'Sign in failed' : 'Sign up failed', result.error);
-    } else if (mode === 'signUp') {
-      Alert.alert('Check your email', 'Confirm your address to finish creating your account.');
+    if (Platform.OS !== 'ios') {
+      setAppleAvailable(false);
+      return;
     }
-  };
+    let cancelled = false;
+    AppleAuthentication.isAvailableAsync()
+      .then((available) => {
+        if (!cancelled) setAppleAvailable(available);
+      })
+      .catch(() => {
+        if (!cancelled) setAppleAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const submitApple = async () => {
     setAppleBusy(true);
@@ -240,89 +223,35 @@ function AuthForm({
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>{mode === 'signIn' ? 'Welcome back' : 'Create your account'}</Text>
-        <Text style={styles.subtitle}>Sync your stats and Pro unlock across devices.</Text>
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text style={styles.title}>Your account is optional</Text>
+      <Text style={styles.subtitle}>
+        Play and purchases work fully signed out. Sign in with Apple only if you want your Pro unlock and
+        display name to follow you to another device.
+      </Text>
 
-        {appleAvailable && (
-          <>
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-              cornerRadius={14}
-              style={styles.appleButton}
-              onPress={submitApple}
-            />
-            {appleBusy && <ActivityIndicator color={colors.inkDim} style={styles.appleBusyIndicator} />}
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-          </>
-        )}
-
-        {mode === 'signUp' && (
-          <TextInput
-            style={styles.input}
-            placeholder="Display name"
-            placeholderTextColor={colors.inkFaint}
-            value={name}
-            onChangeText={setName}
-            maxLength={24}
-            returnKeyType="next"
+      {appleAvailable === null ? (
+        <ActivityIndicator color={colors.inkDim} style={styles.appleCheckIndicator} />
+      ) : appleAvailable ? (
+        <>
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+            cornerRadius={14}
+            style={styles.appleButton}
+            onPress={submitApple}
           />
-        )}
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor={colors.inkFaint}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          returnKeyType="next"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor={colors.inkFaint}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          returnKeyType="done"
-          onSubmitEditing={submit}
-        />
-
-        <Pressable
-          style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
-          onPress={submit}
-          disabled={!canSubmit || submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color={colors.flameInk} />
-          ) : (
-            <Text style={[styles.submitButtonText, !canSubmit && styles.submitButtonTextDisabled]}>
-              {mode === 'signIn' ? 'Sign In' : 'Sign Up'}
-            </Text>
-          )}
-        </Pressable>
-
-        <Pressable
-          style={styles.switchModeButton}
-          onPress={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')}
-        >
-          <Text style={styles.switchModeText}>
-            {mode === 'signIn' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+          {appleBusy && <ActivityIndicator color={colors.inkDim} style={styles.appleBusyIndicator} />}
+        </>
+      ) : (
+        <View style={styles.unavailableCard}>
+          <Text style={styles.unavailableText}>
+            Sign in with Apple isn’t available on this device right now. You can still play and go Pro
+            without an account.
           </Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
@@ -334,9 +263,6 @@ const styles = StyleSheet.create({
   centered: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  flex: {
-    flex: 1,
   },
   headerRow: {
     flexDirection: 'row',
@@ -376,72 +302,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.inkDim,
     marginTop: 6,
-    marginBottom: 24,
+    marginBottom: 28,
     lineHeight: 20,
   },
   appleButton: {
     width: '100%',
     height: 52,
-    marginBottom: 8,
+  },
+  appleCheckIndicator: {
+    marginTop: 12,
   },
   appleBusyIndicator: {
-    marginBottom: 8,
+    marginTop: 12,
   },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginVertical: 20,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.line,
-  },
-  dividerText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.inkFaint,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  input: {
+  unavailableCard: {
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    fontSize: 16,
-    color: colors.ink,
-    marginBottom: 12,
+    borderRadius: 16,
+    padding: 18,
   },
-  submitButton: {
-    backgroundColor: colors.flame,
-    borderRadius: 18,
-    paddingVertical: 18,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  submitButtonDisabled: {
-    backgroundColor: colors.cardRaised,
-  },
-  submitButtonText: {
-    color: colors.flameInk,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  submitButtonTextDisabled: {
-    color: colors.inkFaint,
-  },
-  switchModeButton: {
-    paddingVertical: 18,
-    alignItems: 'center',
-  },
-  switchModeText: {
+  unavailableText: {
     fontSize: 14,
-    fontWeight: '700',
     color: colors.inkDim,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   avatarRow: {
     flexDirection: 'row',
