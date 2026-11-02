@@ -55,10 +55,13 @@ and restore interact.
 3. Authentication → Providers → enable **Apple**, per Supabase's
    [Sign in with Apple guide](https://supabase.com/docs/guides/auth/social-login/auth-apple).
 4. In your Apple Developer account, enable the **Sign in with Apple** capability for
-   `com.bombpass.app` (already configured in `app.json` via `expo-apple-authentication`).
-5. No database tables are required — display name is stored on the auth user itself
+   `com.bombpass.app`. The app also declares `ios.usesAppleSignIn: true`, includes the
+   `expo-apple-authentication` config plugin, and commits the native Apple sign-in entitlement.
+5. Keep the Supabase project active. Free Supabase projects can pause after a week of low activity;
+   a paused project makes Apple sign-in fail even when the app binary and credentials are correct.
+6. No database tables are required — display name is stored on the auth user itself
    (`user_metadata.display_name`).
-6. Deploy the delete-account function (lets users self-delete from Account → Delete Account):
+7. Deploy the delete-account function (lets users self-delete from Account → Delete Account):
    ```
    npx supabase login
    npx supabase link --project-ref <your-project-ref>

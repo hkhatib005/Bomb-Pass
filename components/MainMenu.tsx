@@ -59,8 +59,8 @@ export function MainMenu() {
             <View style={styles.rows}>
               <MenuRow
                 icon="👤"
-                label={user ? displayName || user.email || 'Account' : 'Sign In'}
-                sublabel={user ? 'Manage your account' : 'Save stats across devices'}
+                label={user ? displayName || user.email || 'Account' : 'Optional Account'}
+                sublabel={user ? 'Manage your account' : 'Play without signing in'}
                 onPress={() => go('/account')}
               />
               <MenuRow

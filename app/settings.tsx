@@ -65,7 +65,7 @@ export default function SettingsScreen() {
         <Group>
           <Row
             icon="👤"
-            label={user ? displayName || user.email || 'Account' : 'Sign In'}
+            label={user ? displayName || user.email || 'Account' : 'Optional Account'}
             onPress={() => router.push('/account')}
           />
         </Group>
@@ -98,8 +98,8 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>House Party</Text>
           <Text style={styles.cardBody}>
-            Party games for a phone that gets passed around. Sign in to save your stats and Pro unlock across
-            devices — or skip it and everything still works offline.
+            Family-friendly party games for a phone that gets passed around. No account is needed; Apple sign-in
+            is only an optional way to sync your profile and Pro access.
           </Text>
           <Text style={styles.versionText}>Version {APP_VERSION}</Text>
         </View>

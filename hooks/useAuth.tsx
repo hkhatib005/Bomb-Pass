@@ -22,6 +22,27 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const NOT_CONFIGURED_ERROR = 'Sign-in isn’t set up yet — see README for Supabase setup.';
+const AUTH_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('Account sync timed out. You can keep playing without an account and try again later.')),
+      timeoutMs
+    );
+
+    Promise.resolve(promise).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -30,10 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!supabase) return;
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => setSession(data.session))
+      .catch(() => setSession(null))
+      .finally(() => setLoading(false));
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
@@ -61,10 +83,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return { error: 'Apple did not return an identity token.' };
           }
 
-          const { error } = await supabase.auth.signInWithIdToken({
-            provider: 'apple',
-            token: credential.identityToken,
-          });
+          const { error } = await withTimeout(
+            supabase.auth.signInWithIdToken({
+              provider: 'apple',
+              token: credential.identityToken,
+            }),
+            AUTH_TIMEOUT_MS
+          );
           if (error) return { error: error.message };
 
           // Apple only ever includes the name on the user's very first authorization.
