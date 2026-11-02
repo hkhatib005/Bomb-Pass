@@ -20,9 +20,9 @@ export const PACKS: Pack[] = [
     isFree: false,
   },
   {
-    id: 'food-and-drink',
-    name: 'Food & Drink',
-    description: 'For the food-obsessed. Toppings, spices, desserts, and more.',
+    id: 'food-and-snacks',
+    name: 'Food & Snacks',
+    description: 'For food fans. Toppings, spices, desserts, and more.',
     isFree: false,
   },
   {

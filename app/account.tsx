@@ -48,7 +48,7 @@ export default function AccountScreen() {
         <Pressable style={styles.backButton} onPress={() => router.back()} hitSlop={12}>
           <Text style={styles.backButtonText}>‹</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>Account</Text>
+        <Text style={styles.headerTitle}>Optional Account</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -63,7 +63,7 @@ export default function AccountScreen() {
           onGoPro={() => router.push('/go-pro')}
         />
       ) : (
-        <SignedOutView onSignInWithApple={signInWithApple} />
+        <SignedOutView onSignInWithApple={signInWithApple} onContinueWithoutAccount={() => router.back()} />
       )}
     </SafeAreaView>
   );
@@ -190,8 +190,10 @@ function SignedInView({
 
 function SignedOutView({
   onSignInWithApple,
+  onContinueWithoutAccount,
 }: {
   onSignInWithApple: () => Promise<{ error: string | null }>;
+  onContinueWithoutAccount: () => void;
 }) {
   const [appleBusy, setAppleBusy] = useState(false);
   // Tri-state: null while we're checking, so the button doesn't flash in and out.
@@ -217,9 +219,12 @@ function SignedOutView({
 
   const submitApple = async () => {
     setAppleBusy(true);
-    const result = await onSignInWithApple();
-    setAppleBusy(false);
-    if (result.error) Alert.alert('Sign in with Apple failed', result.error);
+    try {
+      const result = await onSignInWithApple();
+      if (result.error) Alert.alert('Sign in with Apple failed', result.error);
+    } finally {
+      setAppleBusy(false);
+    }
   };
 
   return (
@@ -251,6 +256,10 @@ function SignedOutView({
           </Text>
         </View>
       )}
+
+      <Pressable style={styles.continueButton} onPress={onContinueWithoutAccount}>
+        <Text style={styles.continueButtonText}>Continue without an account</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -327,6 +336,21 @@ const styles = StyleSheet.create({
     color: colors.inkDim,
     lineHeight: 20,
     textAlign: 'center',
+  },
+  continueButton: {
+    marginTop: 18,
+    minHeight: 50,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  continueButtonText: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '700',
   },
   avatarRow: {
     flexDirection: 'row',

@@ -28,7 +28,7 @@ const SLIDES: Slide[] = [
     icon: '🎉',
     eyebrow: 'WELCOME',
     title: 'House Party',
-    body: 'Party games built for passing the phone around the room. No account needed — just pick a game and go.',
+    body: 'Family-friendly group games built for passing one phone around the room. No account needed — just pick a game and go.',
     accent: colors.flame,
     accentInk: colors.flameInk,
   },
